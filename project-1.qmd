@@ -1,8 +1,44 @@
 ---
-title: "Project 1"
+title: "Project 1 Checkpoint 1"
 author: "Avery Stewart"
 format: html
 editor: visual
 ---
 
-## 
+## Plastic Pollution Data
+
+#### Context
+
+This dataset comes from the Break Free From Plastic movement from the years 2019 and 2020. The data was collected from volunteer brand audits, where volunteers collect plastic waste, sort it by plastic type, and count it by the brand name. The dataset combines a multitude of countries that have participated in the global audit for those two years detailing variables such as the source of the plastic as well as the various types of plastics categorized by recycling codes. This data is used to unveil big corporations and countries that are behind the majority of plastic pollution we see in the world as well as pushing sustainable alternatives in order to pave the way to a future where the world is plastic pollution free.
+
+#### Cleaning
+
+
+The original data was spread across two separate files for 2019 and 2020. The 2019 files did not contain a column with the country name so the information was extracted from the file names and added to the data. Also for the 2019 files, not every country reported the same type of plastic so columns were added and inputed with zeros to account for the missing values and to give every file the same number of columns. The 2020 data was more consistent across countries with only a few null-valued rows needing to be removed. The columns were changed to snake case convention to be consistent for both years, a year variable was added to each, and the two datasets were merged into one dataset.
+
+
+#### Research Questions
+
+With the data:
+
+1. Is there a difference in the average amount of plastic found in each country between the years 2019 and 2020, could COVID-19 have been a factor of some difference?
+
+2. Which plastic types are the most abundant in the audits, does this change from country to country?
+
+With supplemental data:
+
+1. Is there a difference in the average amount of plastic from 2019 to more recent years like 2025?
+
+2. Do countries with stricter recycling laws show a significant difference in the audit outcomes?
+
+
+
+
+#### Visualizations 
+
+
+![](visualizations.png)
+
+
+
+
