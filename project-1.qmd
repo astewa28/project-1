@@ -3,6 +3,8 @@ title: "Project 1 Checkpoint 1"
 author: "Avery Stewart"
 format: html
 editor: visual
+html:
+  embed-resources: true
 ---
 
 ## Plastic Pollution Data
@@ -38,7 +40,5 @@ With supplemental data:
 
 
 ![](visualizations.png)
-
-
 
 
