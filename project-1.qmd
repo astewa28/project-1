@@ -1,13 +1,31 @@
 ---
-title: "Project 1 Checkpoint 1"
+title: "Project 1"
 author: "Avery Stewart"
 format: html
-editor: visual
-html:
-  embed-resources: true
+editor: source
+embed-resources: true
 ---
 
 ## Plastic Pollution Data
+
+```{r}
+#| include: false
+library(tidyverse)
+library(gt)
+```
+
+
+```{r}
+#| label: The Data
+
+plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
+
+plastics |>
+  filter_out(country == "EMPTY") |>
+  dplyr::sample_n(5) |>
+  gt()
+```
+
 
 #### Context
 
@@ -40,5 +58,74 @@ With supplemental data:
 
 
 ![](visualizations.png)
+
+#### Proportions of Plastics for each Country
+
+```{r}
+
+plastics |>
+  group_by(country, year) |>
+  filter_out(country == "EMPTY") |>
+  summarise(across(hdpe:pvc, ~sum(.x, na.rm = TRUE)),
+            total = sum(grand_total, na.rm = TRUE),
+            .groups = "drop") |>
+  select(country, year, hdpe:pvc, total) |>
+  mutate(across(hdpe:pvc, ~.x/total)) |>
+  select(-total) |>
+  mutate(country = str_to_title(country),
+         across(hdpe:pvc, ~round(.x, 2))) |>
+  gt() |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels())
+
+
+plastics |> 
+  filter_out(country %in% c("EMPTY", "Grand Total")) |>
+  group_by(country, year) |>
+  summarize(total_plastic = sum(grand_total, na.rm = TRUE), .groups = "drop") |>
+  arrange(desc(total_plastic)) |>
+  mutate(country = str_to_title(country)) |>
+  slice_head(n = 20)
+
+```
+
+```{r}
+plastics_proportions <- function(df) {
+  df |>
+    filter_out(parent_company == "Grand Total", is.na(grand_total)) |>
+    group_by(country, year) |>
+    summarise(hdpe = sum(hdpe, na.rm = TRUE),
+      ldpe = sum(ldpe, na.rm = TRUE),
+      pet = sum(pet, na.rm = TRUE),
+      pp = sum(pp, na.rm = TRUE),
+      ps = sum(ps, na.rm = TRUE),
+      pvc = sum(pvc, na.rm = TRUE),
+      o  = sum(o, na.rm = TRUE),
+      grand_total = sum(grand_total, na.rm = TRUE),
+      .groups = "drop") |>
+    mutate(prop_hdpe = hdpe / grand_total,
+      prop_ldpe = ldpe / grand_total,
+      prop_pet = pet / grand_total,
+      prop_pp = pp / grand_total,
+      prop_ps = ps / grand_total,
+      prop_pvc = pvc / grand_total,
+      prop_o = o / grand_total) |>
+    select(country, year, starts_with("prop_"))
+}
+
+plastics |>
+  plastics_proportions() |>
+  filter(country %in% c("India", "China", "United States of America", "Indonesia", "Nigeria")) |>
+  mutate(across(prop_hdpe:prop_o, ~round(.x, 2)),
+         country = str_to_title(country)) |>
+  filter_out(country == "EMPTY") |>
+  gt() |>
+  tab_style(style = cell_text(weight = "bold"),
+    locations = cells_column_labels()) |>
+  tab_caption("Proportion of each plastic type found in audits from highly populated countries by year")
+  
+```
+
 
 
