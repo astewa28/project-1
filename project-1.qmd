@@ -60,6 +60,144 @@ With supplemental data:
 
 #### Proportions of Plastics for each Country
 
+```{r}
+plastics_clean <- plastics |> 
+  mutate(across(empty:pvc, ~replace_na(., 0)),
+         total = rowSums(across(c(empty:pvc))),
+        .before = num_events)
+
+```
+
+To address the NA values present in our data our group decided to turn any NA within the plastic type columns into a zero. The rationale being that when being filled out if there were no counts of a certain type some would input a 0 and others would leave the cell empty on a spreadsheet. To address NAs in the grand totals we summed the counts of the different type of plastics and found that only two discrepancies were found shown below.
+
+```{r}
+plastics_clean|> 
+  filter(grand_total != total)
+```
+
+
+
+```{r}
+country_profile <- function(data, group_var1, group_var2, min_audits = 10) {
+  data |>
+    filter(!is.na(country), country != "EMPTY") |>
+    group_by({{ group_var1 }}, {{ group_var2 }}) |>
+    summarise(
+      audits = n(),
+      total_pieces = sum(grand_total),
+      median_pieces = median(grand_total),
+      mean_pieces = mean(grand_total),
+      max_pieces = max(grand_total),
+      .groups = "drop"
+    ) |>
+    filter(audits >= min_audits) |>
+    arrange({{ group_var1 }}, {{ group_var2 }}) |>
+    gt() |>
+    tab_header(
+      title = md(
+        paste0(
+          "**Table.** Plastic cleanup profile by country and year for countries with at least ",
+           min_audits,
+          " audits."
+        )
+      )
+  ) |>
+  fmt_number(
+    columns = c(audits, total_pieces, median_pieces, mean_pieces, max_pieces),
+    decimals = 1,
+    use_seps = TRUE
+  ) |>
+  cols_label(
+    country = md("**Country**"),
+    year = md("**Year**"),
+    audits = md("**Audits**"),
+    total_pieces = md("**Total Pieces**"),
+    median_pieces = md("**Median Pieces**"),
+    mean_pieces = md("**Mean Pieces**"),
+    max_pieces = md("**Max Pieces**")
+  )
+}
+
+
+country_profile(plastics_clean, country, year, min_audits = 1) 
+```
+
+```{r}
+
+plastic_cols <- c("hdpe", "ldpe", "o", "pet", "pp", "ps", "pvc")
+
+map_dfr(plastic_cols, function(col) {
+  tibble(
+    plastic_type = col,
+    total = sum(plastics[[col]], na.rm = TRUE),
+    mean = mean(plastics[[col]], na.rm = TRUE),
+    median = median(plastics[[col]], na.rm = TRUE),
+    sd = sd(plastics[[col]], na.rm = TRUE),
+    iqr = IQR(plastics[[col]], na.rm = TRUE),
+    min = min(plastics[[col]], na.rm = TRUE),
+    max = max(plastics[[col]], na.rm = TRUE),
+    audits_with_plastic_type = sum(plastics[[col]] > 0, na.rm = TRUE),
+    percent_of_audits = mean(plastics[[col]] > 0, na.rm = TRUE)
+  )
+}) |>
+  gt() |>
+  fmt_percent(columns = percent_of_audits, decimals = 1) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_header("Summary statistics for each plastic type across all audits") |>
+  cols_label(
+    plastic_type = "Plastic Type",
+    total = "Total",
+    mean = "Mean",
+    median = "Median",
+    sd = "SD",
+    iqr = "IQR",
+    min = "Min",
+    max = "Max",
+    audits_with_plastic_type = "Audits With Plastic Type",
+    percent_of_audits = "Percent of Audits"
+  )
+```
+
+
+```{r}
+
+rate_ify <- function(df, numerator, denominator, name = rate){
+  stopifnot(is.data.frame(df))
+  df |>
+    mutate({{name}} := {{numerator}}/{{denominator}})
+}
+
+plastics_clean |> 
+  group_by(country,year) |> 
+  summarise(total_trash = sum(total),
+            num_events = mean(num_events),
+            .groups = "drop") |>
+  rate_ify(numerator = total_trash,
+           denominator = num_events,
+           name = avg_event_impact) |> 
+  filter(country %in% c("India",
+                        "China",
+                        "United States of America",
+                        "Indonesia", 
+                        "Nigeria")) |>
+ 
+  gt() |>
+  fmt_number(columns = avg_event_impact, drop_trailing_zeros = TRUE) |> 
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels()) |>
+  tab_caption("Rate of Plastic Accounted per Audit for 
+              Highly Populated Countries") |>
+  cols_label(country = "Country", 
+             year = "Year",
+             total_trash = "Total Count of Plastics",
+             num_events = "Number of Audit Events",
+             avg_event_impact = "Average Waste Accounted for per Audit")
+```
+
+
 
 ```{r}
 proportions <- function(df) {
@@ -71,22 +209,23 @@ proportions <- function(df) {
   
 }
 
-plastics |>
+plastics_clean |>
     mutate(year = factor(year)) |>
     group_by(country, year) |>
-    summarise(across(hdpe:grand_total, 
+    summarize(across(empty:grand_total, 
                      ~sum(.x, na.rm = TRUE)),
               .groups = "drop") |>
   proportions() |>
   filter(country %in% c("India", "China", "United States of America", "Indonesia", "Nigeria")) |>
   gt() |>
-  fmt_percent(columns = hdpe:pvc) |>
+  fmt_percent(columns = empty:pvc) |>
   tab_style(style = cell_text(weight = "bold"),
     locations = cells_column_labels()) |>
   tab_caption("Percentage of each plastic type found in audits from highly populated countries by year") |>
   cols_move_to_end(o) |>
   cols_label(country = "Country", 
              year = "Year",
+             empty = "Empty",
              hdpe = "HDPE",
              ldpe = "LDPE",
              o = "Other",
