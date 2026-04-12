@@ -58,7 +58,6 @@ With supplemental data:
 
 ![](visualizations.png)
 
-#### Proportions of Plastics for each Country
 
 ```{r}
 plastics_clean <- plastics |> 
@@ -76,6 +75,8 @@ plastics_clean|>
 ```
 
 
+
+#### Summary Statistics of Audits by Country and Year
 
 ```{r}
 country_profile <- function(data, group_var1, group_var2, min_audits = 10) {
@@ -122,6 +123,8 @@ country_profile <- function(data, group_var1, group_var2, min_audits = 10) {
 country_profile(plastics_clean, country, year, min_audits = 1) 
 ```
 
+#### Summary Statistics for Plastic Types
+
 ```{r}
 
 plastic_cols <- c("hdpe", "ldpe", "o", "pet", "pp", "ps", "pvc")
@@ -162,6 +165,8 @@ map_dfr(plastic_cols, function(col) {
 ```
 
 
+#### Plastic Counts per Audit for Highly Populated Countries
+
 ```{r}
 
 rate_ify <- function(df, numerator, denominator, name = rate){
@@ -197,10 +202,13 @@ plastics_clean |>
              avg_event_impact = "Average Waste Accounted for per Audit")
 ```
 
-
+#### Percentage of Plastic Types for Highly Populated Countries
 
 ```{r}
 proportions <- function(df) {
+  if(!is.data.frame(df)){
+    stop("Input must be a dataframe.")
+  }
   
   df |>
     select(country:pvc) |>
@@ -216,12 +224,14 @@ plastics_clean |>
                      ~sum(.x, na.rm = TRUE)),
               .groups = "drop") |>
   proportions() |>
-  filter(country %in% c("India", "China", "United States of America", "Indonesia", "Nigeria")) |>
+  filter(country %in% c("India", "China", "United States of America", 
+                        "Indonesia", "Nigeria")) |>
   gt() |>
   fmt_percent(columns = empty:pvc) |>
   tab_style(style = cell_text(weight = "bold"),
     locations = cells_column_labels()) |>
-  tab_caption("Percentage of each plastic type found in audits from highly populated countries by year") |>
+  tab_caption("Percentage of Plastic Type Found in Audits From Highly Populated
+              Countries") |>
   cols_move_to_end(o) |>
   cols_label(country = "Country", 
              year = "Year",
