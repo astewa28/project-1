@@ -12,6 +12,10 @@ embed-resources: true
 #| include: false
 library(tidyverse)
 library(gt)
+library(rvest)
+library(httr)
+library(jsonlite)
+library(tidyjson)
 plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
 ```
 
@@ -93,11 +97,13 @@ country_profile <- function(data, group_var1, group_var2, min_audits = 10) {
     ) |>
     filter(audits >= min_audits) |>
     arrange({{ group_var1 }}, {{ group_var2 }}) |>
+    mutate(country = str_to_title(country)) |>
     gt() |>
     tab_header(
       title = md(
         paste0(
-          "**Table.** Plastic cleanup profile by country and year for countries with at least ",
+          "**Table.** Plastic cleanup profile by country and year for countries 
+          with at least ",
            min_audits,
           " audits."
         )
@@ -145,6 +151,7 @@ map_dfr(plastic_cols, function(col) {
 }) |>
   gt() |>
   fmt_percent(columns = percent_of_audits, decimals = 1) |>
+  fmt_number(columns = mean:sd, decimals = 2) |>
   tab_style(
     style = cell_text(weight = "bold"),
     locations = cells_column_labels()
@@ -193,8 +200,8 @@ plastics_clean |>
   fmt_number(columns = avg_event_impact, drop_trailing_zeros = TRUE) |> 
   tab_style(style = cell_text(weight = "bold"),
             locations = cells_column_labels()) |>
-  tab_caption("Rate of Plastic Accounted per Audit for 
-              Highly Populated Countries") |>
+  tab_caption("Rate of Plastic Accounted per Audit for the Top 5
+              Populated Countries") |>
   cols_label(country = "Country", 
              year = "Year",
              total_trash = "Total Count of Plastics",
@@ -230,7 +237,7 @@ plastics_clean |>
   fmt_percent(columns = empty:pvc) |>
   tab_style(style = cell_text(weight = "bold"),
     locations = cells_column_labels()) |>
-  tab_caption("Percentage of Plastic Type Found in Audits From Highly Populated
+  tab_caption("Percentage of Plastic Type Found in Audits From the Top 5 Populated
               Countries") |>
   cols_move_to_end(o) |>
   cols_label(country = "Country", 
@@ -245,5 +252,202 @@ plastics_clean |>
              pvc = "PVC")
 
 ```
+
+#### API 1
+
+```{r}
+key = "opQBtqw8M0FwKIxA9A4BiTvqac33H2mGRxQLC7rV"
+
+mining2 <- function(country){
+
+  url <- str_c("https://api.api-ninjas.com/v1/country?name=",
+               URLencode(country))
+
+  res <- GET(
+    url = url,
+    add_headers("X-Api-Key" = key)
+  )
+
+  rawToChar(res$content) |>
+    as.tbl_json() |>
+    gather_array() |>
+    spread_all() |>
+    mutate(input_country = country) |>
+    as_tibble() 
+}
+```
+
+Googled on how to use map if thee were requests than an API would no accept, reached:
+https://stackoverflow.com/questions/50486527/how-to-use-map-with-possibly 
+
+
+```{r}
+test_list2 <- unique(plastics_clean$country)
+
+safe_mining <- possibly(mining2, otherwise = tibble())
+
+
+result <- map(test_list2, safe_mining) |>
+  bind_rows(.id = "id")
+```
+
+
+```{r}
+final <- plastics_clean |>
+  left_join(result, by = c("country" = "input_country"))
+```
+
+
+```{r}
+final |> 
+  select(country:volunteers, gdp, imports, pop_density, population, employment_industry,employment_agriculture, employment_services) |>
+  group_by(country) |> 
+  summarise(total_waste = sum(total),
+            industry = mean(employment_industry),
+            service = mean(employment_services),
+            ag = mean(employment_agriculture),
+            .groups = "drop") |>
+  filter_out(country == "EMPTY") |>
+  mutate(
+    largest_sector = case_when(
+      industry >= service & industry >= ag ~ "Industry",
+      service >= industry & service >= ag ~ "Service",
+      ag >= industry & ag >= service ~ "Agriculture"),
+    .after = total_waste,
+    country = str_to_title(country)) |> 
+  gt() |> 
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels()) |>
+  tab_caption("Waste Compareed to Employment Sectorization") |>
+  cols_label(country = "Country", 
+             total_waste = "Total Count of Plastics",
+             industry = "Percent of Employment in Industry Sector",
+             service = "Percent of Employment in Service Sector",
+             ag = "Percent of Employment in Agriculture Sector",
+             largest_sector = "Largest Employment Sector")
+```
+This API provided statistics on the countries of the world. By iterating against the countries in our data set we were able to get information on them. The API is unclear on which years the data is from and because of that we are looking at measures that we consider to be more stable at least within the years that our original data is from, 2019 and 2020. Sectors of employment is one of those fields. Other there are other interesting variables in this new data as well including but not limited to endangered species, forested area, and co2 emmissions.
+
+
+#### API 2
+```{r}
+
+url <- "https://api.footprintnetwork.org/v1/types"
+user_name <- "username"
+api_key <- "1gs79s099C3TboOH32857V43Bur6rQssvLHAjF9e5B0GB23I65V6"
+#checkin
+response <- GET(
+  url,
+  authenticate(user = user_name, password = api_key, type = "basic"),
+  add_headers(Accept = "application/json")
+)
+```
+
+```{r}
+years <- c(2019, 2020)
+
+all_data <- lapply(years, function(y) {
+  url <- paste0("https://api.footprintnetwork.org/v1/data/all/", y, "/all")
+  
+  res <- GET(
+    url,
+    authenticate(user_name, api_key, type = "basic"),
+    add_headers(Accept = "application/json")
+  )
+  
+fromJSON(rawToChar(res$content))
+  }) |>
+  bind_rows()
+```
+
+```{r}
+wide_data <- all_data |>
+  select(year, countryName, isoa2, record, value) |>
+    pivot_wider(
+    names_from = record,
+    values_from = value
+    ) |>
+  rename(country = countryName)
+  
+
+joined_data <- left_join(plastics, wide_data, by = c("country", "year"))
+```
+
+
+```{r}
+
+wide_data_fixed <- wide_data |>
+  mutate(api_country = country) |>
+  mutate(
+    country = case_when(
+      country == "Côte d'Ivoire" ~ "Cote D_ivoire",
+      country == "Ecuador" & year == 2019 ~ "ECUADOR",
+      country == "Ecuador" ~ "Ecuador",
+      country == "Nigeria" & year == 2019 ~ "NIGERIA",
+      country == "Nigeria" ~ "Nigeria",
+      country == "Tanzania, United Republic of" ~ "Tanzania",
+      country == "Viet Nam" ~ "Vietnam",
+      country == "Korea, Republic of" ~ "Korea",
+      country == "Türkiye" ~ "Turkey",
+      country == "United Kingdom" & year == 2020 ~ "United Kingdom of Great Britain & Northern Ireland",
+      country == "United Kingdom" ~ "United Kingdom",
+      country == "China Hong Kong SAR" ~ "Hong Kong",
+      country == "Taiwan" ~ "Taiwan_ Republic of China (ROC)",
+      TRUE ~ country
+    )
+  )
+
+```
+
+```{r}
+#meta dataset
+final_merged <- final |>
+  left_join(wide_data_fixed, by = c("country", "year"))
+```
+
+
+```{r}
+
+summary_country_year <- final_merged |>
+  group_by(country, year) |>
+  summarise(
+    total_plastic = sum(grand_total),
+    avg_plastic = mean(grand_total),
+    footprint_per_capita = first(EFConsPerCap[!is.na(EFConsPerCap)]),
+    biocapacity_per_capita = first(BiocapPerCap[!is.na(BiocapPerCap)]),
+    hdi = first(HDI[!is.na(HDI)]),
+    population = first(Population[!is.na(Population)]),
+    .groups = "drop"
+  ) |>
+  filter_out(country == "EMPTY") |>
+  mutate(country = str_to_title(country))
+
+summary_country_year |>
+  gt() |>
+  tab_header(
+    title = "Country-Year Summary of Plastics and Environmental Data"
+  ) |>
+  cols_label(
+    country = "Country",
+    year = "Year",
+    total_plastic = "Total Plastic Items Collected",
+    avg_plastic = "Average Plastic Items Collected",
+    footprint_per_capita = "Ecological Footprint per Capita",
+    biocapacity_per_capita = "Biocapacity per Capita",
+    hdi = "HDI",
+    population = "Population"
+  ) |>
+  fmt_number(
+    columns = c(total_plastic, avg_plastic, population),
+    decimals = 0
+  ) |>
+  fmt_number(
+    columns = c( footprint_per_capita, biocapacity_per_capita, hdi),
+    decimals = 2
+  )
+```
+
+This data set is countries and territories in Global Footprint Network’s National Footprint and Biocapacity Accounts. The data is from the Footprint Network Open Data Platform, which reports nation level results and lets users compare countries on metrics such as Total Biocapacity and Total Ecological Footprint. The data is from 1961 to the present. The data is meant to show if places live within their ecological means or not by comparing ecological demand, measured by Ecological Footprint, against ecological supply. The platform presents this data through an interactive country trends that let users select indicators and countries to explore changes over time.
+
 
 
