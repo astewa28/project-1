@@ -16,6 +16,15 @@ library(rvest)
 library(httr)
 library(jsonlite)
 library(tidyjson)
+library(ggridges)
+library(RColorBrewer)
+library(viridis)
+library(ggtext)
+library(broom)
+library(gt)
+library(scales)
+library(car)
+
 plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
 ```
 
@@ -454,6 +463,7 @@ This dataset was obtained through the Global Footprint Network API by pulling co
 #### Plots
 
 ```{r}
+#| warning: false
 
 final_merged |>
   mutate(region = countrycode::countrycode(country,
@@ -493,6 +503,204 @@ final_merged |>
 
 ```
 
+```{r}
+final_merged |> 
+  filter(year == 2019) |> 
+  group_by(country) |> 
+  summarize(unknown = sum(empty),
+            hdpe = sum(hdpe),
+            ldpe = sum(ldpe),
+            other = sum(o),
+            pet = sum(pet),
+            pp = sum(pp),
+            ps = sum(ps),
+            pvc = sum(pvc),
+            total = sum(total),
+            gdp_per_capita = mean(gdp_per_capita),
+            hdi = mean(HDI),
+            .groups = "drop") |> 
+  mutate(income_group = case_when(
+    gdp_per_capita < 1500 ~ "Low Income",
+    gdp_per_capita > 12000 ~ "High Income",
+    TRUE ~ "Middle Income")) |> 
+  pivot_longer(
+    cols = unknown:pvc,
+    names_to = "plastic_type",
+    values_to = "waste") |> 
+  filter(waste <= 3500) |> 
+  
+  ggplot(mapping = aes(x = waste,
+                       y = plastic_type,
+                       fill = income_group)) +
+  geom_density_ridges(alpha = 0.4) +
+  scale_fill_viridis(discrete=TRUE) +
+  labs(
+    title = "Plastic Waste Type Distribution of Countries by GDP per Capita",
+    subtitle = "Divided into <span style='color: #6a546f;'>High Income</span>, 
+      <span style='color: #b5aa5f;'>Middle Income</span>,
+    and <span style='color: #5e8684;'>Low Income</span>",
+    x = "Waste Amount",
+    y = "",
+    alt = "Density ridge plot showing the density of plastic waste audited
+    for multiple types of plastic. Colored by GDP per capita category,
+    High, Middle, and Low") +
+  theme_dark() +
+  theme(plot.subtitle =  element_markdown(),
+        legend.position = "none") 
+  
+```
+
+```{r}
+
+model_df <- final_merged |>
+  group_by(country, year) |>
+  summarise(
+    total_plastic = sum(total, na.rm = TRUE),
+    Population = first(na.omit(Population)),
+    pop_density = first(na.omit(pop_density)),
+    employment_industry = first(na.omit(employment_industry)),
+    HDI = first(na.omit(HDI)),
+    gdp = first(na.omit(gdp)),
+    imports = first(na.omit(imports)),
+    infant_mortality = first(na.omit(infant_mortality)),
+    region = first(na.omit(region)),
+    .groups = "drop"
+  ) |>
+  mutate(
+    region = as.factor(region),
+    log_total_plastic = log(total_plastic)
+  ) 
+
+fit_1 <- lm(
+  log_total_plastic ~ Population + pop_density + region,
+  model_df
+)
+
+fit_2 <- lm(
+  log_total_plastic ~ Population + pop_density + employment_industry + region,
+  model_df
+)
+
+fit_3 <- lm(
+  log_total_plastic ~ Population + pop_density + HDI + region,
+  model_df
+)
+
+fit_4 <- lm(
+  log_total_plastic ~ Population + pop_density + imports + region,
+  model_df
+)
+
+fit_5 <- lm(
+  log_total_plastic ~ Population + pop_density + infant_mortality + region,
+  model_df
+)
 
 
+fit_6 <- lm(
+  log_total_plastic ~ Population + pop_density + region + gdp,
+  model_df
+)
 
+fit_7 <- lm(
+  log_total_plastic ~ Population + pop_density + region + gdp + imports,
+  model_df
+)
+
+adj_rsq <- list(
+  summary(fit_1)$adj.r.squared,
+  summary(fit_2)$adj.r.squared,
+  summary(fit_3)$adj.r.squared,
+  summary(fit_4)$adj.r.squared,
+  summary(fit_5)$adj.r.squared,
+  summary(fit_6)$adj.r.squared,
+  summary(fit_7)$adj.r.squared
+)
+
+adj_rsq
+
+
+vif_results <- list(
+  vif(fit_1),
+  vif(fit_2),
+  vif(fit_3),
+  vif(fit_4),
+  vif(fit_5),
+  vif(fit_6),
+  vif(fit_7)
+)
+
+vif_results
+
+```
+
+```{r}
+
+model_df <- final_merged |>
+  group_by(country, year) |>
+  summarise(
+    total_plastic = sum(total, na.rm = TRUE),
+    Population_millions = first(na.omit(Population)) / 1000000,
+    pop_density = first(na.omit(pop_density)),
+    gdp_billions = first(na.omit(gdp)) / 1000000000,
+    region = first(na.omit(region)),
+    .groups = "drop"
+  ) |>
+  mutate(
+    region = as.factor(region),
+    log_total_plastic = log(total_plastic)
+  ) 
+
+fit_6 <- lm(
+  log_total_plastic ~ Population_millions + pop_density + gdp_billions + region,
+  model_df
+)
+
+tbl <- tidy(fit_6, conf.int = TRUE) |>
+  mutate(
+    Predictor = dplyr::recode(term,
+      `(Intercept)` = "Intercept",
+      `Population_millions` = "Population (millions)",
+      `pop_density` = "Population Density",
+      `gdp_billions` = "GDP (billions)"
+    ),
+    Predictor = sub("^region", "Region: ", Predictor)
+  ) |>
+  select(
+    Predictor,
+    Estimate = estimate,
+    `Std. Error` = std.error,
+    `t value` = statistic,
+    `p value` = p.value,
+    `95% CI Lower` = conf.low,
+    `95% CI Upper` = conf.high
+  )
+
+tbl |>
+  gt() |>
+  tab_header(
+    title = md("**Linear Regression Predicting Logged Plastic Collected by Country, Year**"),
+    subtitle = "Response: log(total_plastic)"
+  ) |>
+  cols_label(
+    Predictor = md("**Predictor**"),
+    Estimate = md("**Estimate**"),
+    `Std. Error` = md("**Std. Error**"),
+    `t value` = md("**t value**"),
+    `p value` = md("**p value**"),
+    `95% CI Lower` = md("**95% CI Lower**"),
+    `95% CI Upper` = md("**95% CI Upper**")
+  ) |>
+  fmt_number(
+    columns = c(Estimate, `Std. Error`, `t value`, `95% CI Lower`, `95% CI Upper`),
+    decimals = 4
+  ) |>
+  fmt_number(columns = `p value`, decimals = 3) |>
+  tab_source_note(
+    source_note = md(
+       "The response variable was transformed as log(total_plastic) to meet linear regression assumptions"
+    )
+  )
+```
+
+A linear regression model was fit to examine how demographic, economic, and regional factors relate to differences in plastic collected during cleanup audits across countries and years. The model included population (in millions), population density, GDP (in billions), and regions as predictors of the log transformed plastic counts. The results show that population density is significantly associated with plastic collected (p = 0.042), indicating that more densely populated countries tend to have lower levels of plastic collected, holding the other factors constant. Regional differences were the strongest predictors, with countries in Western Asia showing significantly lower levels compared to the reference region (p = 0.001). Total population (p = 0.212) and GDP (p = 0.169) were not statistically significant, which suggests that the economic size does not explain variation in plastic collected. The results show that geographic location and population distribution are more important than economic indicators in explaining differences in plastic collected.
