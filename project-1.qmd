@@ -451,6 +451,8 @@ summary_country_year |>
 This dataset was obtained through the Global Footprint Network API by pulling country level data for 2019 and 2020 from the National Footprint and Biocapacity Accounts. The API returns environmental and development indicators for countries and territories, including metrics such as Total Biocapacity and Total Ecological Footprint. After retrieving the data, I combined the yearly responses, reshaped them into a country year format, and matched them to the plastics dataset using country and year. This allowed me to incorporate environmental context into the original dataset and compare plastic collection outcomes with  a nations ecological state.
 
 
+#### Plots
+
 ```{r}
 
 final_merged |>
@@ -493,19 +495,4 @@ final_merged |>
 
 
 
-```{r}
-
-summary(final_merged$gdp)
-
-final_merged |>
-  filter(country == "United States of America") |>
-  mutate(gdp_trillion = gdp / 1e6)
-
-final_merged |> 
-  filter(country == "United States of America") |> 
-  select(country, year, gdp) |> 
-  distinct()
-
-final_merged |> filter(is.na(gdp) | gdp == 0) |> select(country, gdp)
-```
 
