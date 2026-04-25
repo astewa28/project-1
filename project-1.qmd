@@ -451,5 +451,61 @@ summary_country_year |>
 This dataset was obtained through the Global Footprint Network API by pulling country level data for 2019 and 2020 from the National Footprint and Biocapacity Accounts. The API returns environmental and development indicators for countries and territories, including metrics such as Total Biocapacity and Total Ecological Footprint. After retrieving the data, I combined the yearly responses, reshaped them into a country year format, and matched them to the plastics dataset using country and year. This allowed me to incorporate environmental context into the original dataset and compare plastic collection outcomes with  a nations ecological state.
 
 
+```{r}
 
+final_merged |>
+  mutate(region = countrycode::countrycode(country,
+            origin = "country.name",
+            destination = "continent"),
+         total_normalized = total / num_events, 
+         gdp_trillions = gdp / 1e6) |>
+  filter_out(country == "EMPTY",
+           total == 0,
+           is.na(total),
+           is.na(gdp_trillions),
+           gdp_trillions == 0, 
+           is.na(region)) |>
+  group_by(country, region, year) |>
+  summarize(total_plastic = sum(total_normalized, na.rm = T), 
+            gdp_trillions = mean(gdp_trillions, na.rm = T), 
+            Population = mean(Population, na.rm = T)) |>
+  ggplot(aes(x = gdp_trillions, y = total_plastic, size = Population, 
+             color = region)) +
+    geom_point(alpha = 0.5) +
+    scale_size(range = c(.1, 15), name ="Population") +
+  labs(color = "Region",
+       x = "GDP (Trillions)", 
+       title = "Plastic Pollution Found in Audits vs. GDP for 2019 and 2020",
+       subtitle = "Total Plastic per Cleanup Event",
+       y = "",
+       alt = "Bubble chart showing plastic items found per cleanup event vs GDP in trillions,
+       colored by region and sized by population") +
+  coord_cartesian(ylim = c(0, 26000),
+                  xlim = c(0,25)) + 
+  scale_color_discrete(na.translate = FALSE) +
+  scale_x_sqrt() +
+  facet_wrap(~ year) +
+  theme_light() + scale_color_manual(values = c("Africa" = "mediumspringgreen", "Americas" = "orchid4", 
+                                "Asia" = "darkorange", "Europe" = "deeppink", 
+                                "Oceania" = "royalblue"))
+
+```
+
+
+
+```{r}
+
+summary(final_merged$gdp)
+
+final_merged |>
+  filter(country == "United States of America") |>
+  mutate(gdp_trillion = gdp / 1e6)
+
+final_merged |> 
+  filter(country == "United States of America") |> 
+  select(country, year, gdp) |> 
+  distinct()
+
+final_merged |> filter(is.na(gdp) | gdp == 0) |> select(country, gdp)
+```
 
