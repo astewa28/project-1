@@ -15,7 +15,7 @@ execute:
 toc: true
 toc-location: right
 theme: 
-  light: sandstone
+  light: united
   dark: slate
 ---
 
@@ -37,11 +37,15 @@ This dataset was obtained through the Global Footprint Network API by pulling co
 
 
 # Research Questions
+
 ## Question 1
-How do demographic and economic characteristics of countries along with their geographic location relate to differences in plastic collected during cleanup audits?
+
+Which plastic types are the most abundant in the audits, does this change from country to country?
 
 ## Question 2
-Does the economic well being of a country affect the proportion in which they use specific types of plastics?
+
+How do demographic and economic characteristics of countries along with their geographic location relate to differences in plastic collected during cleanup audits?
+
 
 
 # Data Summaries and Vizualizations
@@ -76,13 +80,11 @@ final_merged <- read_csv("/Users/avery/Desktop/stat541/project-1/final_table.csv
 
 
 ## Data Summaries
-### Summary statistics for each plastic type across all audits
-Need to fix the map_dfr superseeded function
 
 ### Proportions of Plastics for the 5 Most Populated Countries
-this loks like a good one to do the additional styling on 
+
 ```{r}
-#| label: tbl-Data-Summary-2
+#| label: tbl-Data-Summary-1
 #| tbl-cap: "Proportions of Each Plastic Type for the 5 Most Populated Countries"
 
 proportions <- function(df) {
@@ -121,7 +123,68 @@ plastics_clean |>
              pet = "PET",
              pp = "PP",
              ps = "PS",
-             pvc = "PVC")
+             pvc = "PVC")  |>
+  data_color(
+    method = "numeric",
+    palette = "plasma", 
+    reverse = FALSE
+  )
+```
+
+
+### 
+```{r}
+#| label: tbl-Data-Summary-2
+#| tbl-cap: "Summary Statistics of Audits by Country and Year for the 5 Most Populated Countries"
+country_profile <- function(data, group_var1, group_var2, min_audits = 10) {
+  data |>
+    filter(!is.na(country), country != "EMPTY",
+           country %in% c("India",
+                        "China",
+                        "United States of America",
+                        "Indonesia",
+                        "Nigeria")) |>
+    group_by({{ group_var1 }}, {{ group_var2 }}) |>
+    summarise(
+      audits = n(),
+      total_pieces = sum(grand_total),
+      median_pieces = median(grand_total),
+      mean_pieces = mean(grand_total),
+      max_pieces = max(grand_total),
+      .groups = "drop"
+    ) |>
+    filter(audits >= min_audits) |>
+    arrange({{ group_var1 }}, {{ group_var2 }}) |>
+    mutate(country = str_to_title(country)) |>
+    gt() |>
+    tab_header(
+      title = md(
+        paste0(
+          "**Table.** Plastic cleanup profile by country and year for countries 
+          with at least ",
+           min_audits,
+          " audits."
+        )
+      )
+  ) |>
+  fmt_number(
+    columns = c(audits, total_pieces, median_pieces, mean_pieces, max_pieces),
+    decimals = 1,
+    use_seps = TRUE
+  ) |>
+  cols_label(
+    country = md("**Country**"),
+    year = md("**Year**"),
+    audits = md("**Audits**"),
+    total_pieces = md("**Total Pieces**"),
+    median_pieces = md("**Median Pieces**"),
+    mean_pieces = md("**Mean Pieces**"),
+    max_pieces = md("**Max Pieces**")
+  )
+}
+
+
+country_profile(plastics_clean, country, year, min_audits = 1) 
 ```
 
 
