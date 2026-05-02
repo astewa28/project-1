@@ -14,8 +14,8 @@ execute:
   message: false
 toc: true
 toc-location: right
-theme:
-  light: cerulean
+theme: 
+  light: sandstone
   dark: slate
 ---
 
